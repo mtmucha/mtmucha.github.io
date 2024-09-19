@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Introduction to Atomics and the Memory Model in C++ and Rust (Part 1) | Home</title>
+<meta name="generator" content="Jekyll v4.3.4" />
+<meta property="og:title" content="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" />
+<meta name="author" content="Chester How" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Atomic variables and operations may seem straightforward at first glance. But did you know that you can specify a memory_order for individual atomic operations? Why is this useful? By adjusting memory ordering, we can relax certain synchronization guarantees, which can lead to significant performance improvements. There’s more to atomics than just ensuring “atomicity” in the sense of updates happening in a “single operation.”" />
+<meta property="og:description" content="Atomic variables and operations may seem straightforward at first glance. But did you know that you can specify a memory_order for individual atomic operations? Why is this useful? By adjusting memory ordering, we can relax certain synchronization guarantees, which can lead to significant performance improvements. There’s more to atomics than just ensuring “atomicity” in the sense of updates happening in a “single operation.”" />
+<link rel="canonical" href="http://localhost:4000/2024-08-05/introduction-to-atomics-1" />
+<meta property="og:url" content="http://localhost:4000/2024-08-05/introduction-to-atomics-1" />
+<meta property="og:site_name" content="Home" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2024-08-05T12:00:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","author":{"@type":"Person","name":"Chester How","url":"https://chester.how"},"dateModified":"2024-08-05T12:00:00+02:00","datePublished":"2024-08-05T12:00:00+02:00","description":"Atomic variables and operations may seem straightforward at first glance. But did you know that you can specify a memory_order for individual atomic operations? Why is this useful? By adjusting memory ordering, we can relax certain synchronization guarantees, which can lead to significant performance improvements. There’s more to atomics than just ensuring “atomicity” in the sense of updates happening in a “single operation.”","headline":"Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/2024-08-05/introduction-to-atomics-1"},"url":"http://localhost:4000/2024-08-05/introduction-to-atomics-1"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/assets/main.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+
+  <!-- RSS -->
+  <link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Home" />
+
+  <!-- Google Analytics-->
+  
+</head>
+
+
+  <body>
+
+    <nav class="nav">
+  <div class="nav-container">
+    <a href="/">
+      <h2 class="nav-title">Home</h2>
+    </a>
+    <ul>
+      <li><a href="/">Posts</a></li>
+      <!--<li><a href="/tags">Tags</a></li>-->
+      <li><a href="/about">About</a></li>
+    </ul>
+  </div>
+</nav>
+
+
+    <main>
+      <div class="post">
+  <!---<div class="post-info">
+    <span>Written by</span>
+    
+        Chester How
+    
+
+    
+      <br>
+      <span>on&nbsp;</span><time datetime="2024-08-05 12:00:00 +0200">August 05, 2024</time>
+    
+  </div>--->
+
+  <h1 class="post-title">Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)</h1>
+  <div class="post-line"></div>
+
+  <p>Atomic variables and operations may seem straightforward at first glance. 
+But did you know that you can specify a <code class="language-plaintext highlighter-rouge">memory_order</code> for individual atomic operations? Why is this useful? 
+By adjusting memory ordering, we can relax certain synchronization guarantees, which can lead to significant performance improvements. 
+There’s more to atomics than just ensuring “atomicity” in the sense of updates happening in a “single operation.”</p>
+
+<p>In this blog, we will delve into atomics and the memory model behind them, explaining how they work in greater detail. 
+Both Rust and C++ share the same memory model for atomics. <sup id="fnref:1" role="doc-noteref"><a href="#fn:1" class="footnote" rel="footnote">1</a></sup></p>
+
+<h2 id="introduction">Introduction</h2>
+
+<p>There are multiple different CPU architectures implementing different memory models. 
+For example, x86 and ARM have completely different memory models, each providing different guarantees and constraints.
+Writing a program that works correctly across all architectures would be quite tedious.</p>
+
+<p>This problem is eliminated by higher-level languages, which provide their own memory model as an abstraction layer. 
+By programming against this model and following its rules, we can write efficient and correct programs that work seamlessly across different CPU
+architectures.</p>
+
+<p>One such model was introduced in C++11 and evolved over time into C++20 memory model. 
+To understand how atomics work on a deeper level, we’ll begin by establishing some basic relations 
+and gradually progress to more complex ones. However, there will be one significant modification to the original C++20 model: 
+we will omit or simplify certain relations to make it easier to understand. 
+This simplification is based on the fact that <code class="language-plaintext highlighter-rouge">memory_order::consume</code> is generally discouraged. As the standard puts it:</p>
+
+<blockquote>
+  <p>Prefer <code class="language-plaintext highlighter-rouge">memory_order::acquire</code>, which provides stronger guarantees than <code class="language-plaintext highlighter-rouge">memory_order::consume</code>.
+Implementations have found it infeasible to provide performance better than that of <code class="language-plaintext highlighter-rouge">memory_order::acquire</code>.
+Specification revisions are under consideration.</p>
+</blockquote>
+
+<p>There are total of five memory orderings :</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">memory_order::relaxed</code></li>
+  <li><code class="language-plaintext highlighter-rouge">memory_order::acquire</code></li>
+  <li><code class="language-plaintext highlighter-rouge">memory_order::consume</code> (the “black sheep” of the family)</li>
+  <li><code class="language-plaintext highlighter-rouge">memory_order::release</code></li>
+  <li><code class="language-plaintext highlighter-rouge">memory_order::seq_cst</code> (sequential consistency)</li>
+</ul>
+
+<p>These memory orders are listed from the most relaxed to the most strict. 
+When atomic operations are used without explicitly specifying a memory_order, they default to the strictest option: <code class="language-plaintext highlighter-rouge">memory_order::seq_cst</code>. 
+We’ll take a bottom-up approach, starting with the most relaxed memory orders and gradually introducing more strict ones by adding additional relations and constraints.</p>
+
+<p>The goal of this article is to provide a solid understanding of how atomics work wihtout going into too much detail.
+Some relations and concepts will be simplified for clarity. For more in-depth explanations, you can refer to the C++ standard.</p>
+
+<h2 id="evaluation-order-sequenced-before">Evaluation order (sequenced before)</h2>
+
+<p>Before we dvelve into memory orders we must start with Evaluation order. 
+Evaluation order can be understood as simple ‘program order’. When we think about a programs 
+execution we think from top to bottom.</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">foo</span><span class="p">()</span> <span class="p">{</span>
+  <span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// A</span>
+  <span class="kt">int</span> <span class="n">y</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// B</span>
+  <span class="kt">int</span> <span class="n">z</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">;</span> <span class="c1">// C</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>In this snippet we assume that A happens before B and B happens before C, that is our “mind model”.
+We expect that y would equal to 1 and z would equal to 3. 
+In reality a compiler is allowed to do reorderings for performence benefits. However, the program must behave
+“as-if” the instruction happened in this order. Again this shows, that as long as we follow the
+rules of the standard compiler is allowed to do optimizations, as long as they do not 
+break this “as-if” rule.</p>
+
+<p>Reordering can also happen on hardware level, which also does 
+not concern us, we do not care on which level the reorderings happens as long as
+we follow rules of the language we are safe.
+Same holds for the memory model, we program against the 
+model provided by the language.</p>
+
+<p>The formal name for this relation is <em>sequenced-before</em>. A is <em>sequenced-before</em> B and B <em>sequenced-before</em> C.</p>
+
+<ul>
+  <li><strong><em>sequenced-before (SEQ)</em></strong> : Sequenced before is an asymmetric, transitive, pair-wise relationship between evaluations within the same thread.
+    <ul>
+      <li>If A is sequenced before B (or, equivalently, B is sequenced after A), then evaluation of A will be complete before evaluation of B begins.</li>
+      <li>If A is not sequenced before B and B is sequenced before A, then evaluation of B will be complete before evaluation of A begins.</li>
+    </ul>
+  </li>
+</ul>
+
+<p>This is part of definition for program order, which for our purposes can understand more intuitivly, for full 
+definition and rules you can refer to C++ standard.</p>
+
+<p>We can create a graph using this relation :</p>
+
+<p><img src="../images/Blog_1.png" alt="My Image" style="width: 30%" /></p>
+
+<p>This graph is very simple. The <em>W(x)</em> signifies store into variable <em>x</em> and <em>R(x)</em> represents read(load) from variable <em>x</em>, and <em>SEQ</em> 
+is <em>sequenced-before</em> relation. Further down we will use the same notation in a bit more complicated graphs
+to show how different memroy orders form relations.</p>
+
+<p>We could also create a more detialed graph where we turn to change the <em>W(z)</em> expression, however, it is not important
+right know, we wanted to illustrate the <em>sequenced-before</em> relation.</p>
+
+<h2 id="relaxed">Relaxed</h2>
+
+<p>This is the least strict memory order, providing the fewest guarantees. 
+Let’s start with a problem that this memory order can solve.</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="n">counter</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">increment</span> <span class="o">=</span> <span class="p">[]()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+        <span class="o">++</span><span class="n">counter</span><span class="p">;</span>
+    <span class="p">}</span>
+  <span class="p">};</span>
+  <span class="c1">// Create 3 threads</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">t1</span><span class="p">(</span><span class="n">increment</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">t2</span><span class="p">(</span><span class="n">increment</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">t3</span><span class="p">(</span><span class="n">increment</span><span class="p">);</span>
+  <span class="c1">// Join the threads</span>
+  <span class="n">t1</span><span class="p">.</span><span class="n">join</span><span class="p">();</span> <span class="n">t2</span><span class="p">.</span><span class="n">join</span><span class="p">();</span> <span class="n">t3</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>     
+<span class="p">}</span>
+</code></pre></div></div>
+<p>In this code snippet, we have a counter that is incremented by three threads. 
+Each thread increments the counter by 1, ten times in a simple for loop. It’s a straightforward example. 
+However, we are using an ordinary int for the counter. So, what can possibly go wrong?</p>
+
+<p>Could we see a negative value? A typical illustrative problem occurs when one thread is reading while another is writing, 
+causing the reading thread to potentially read gibberish. 
+But does that really happen? It depends. For instance, on x86-64, a properly aligned int value is “atomic” 
+in the sense that updates and reads happen as one operation. 
+This is due to how the hardware handles reads and writes, ensuring that these operations are atomic at the hardware level.
+A scenario where we would read a negative value cannot happen on x86-64.</p>
+
+<p>Given that this is already “atomic” at the hardware level, do we still need an atomic operation for this? 
+It turns out we do. What we are not guaranteed is the <strong>coherence of the variable’s modification order</strong>. 
+If we run this program multiple times, we might observe that the counter is not equal to 30, but instead, for example, 25. 
+Imagine two threads both read the value 5 from the counter; 
+one thread stores 6 in the counter, and then the second thread does the same. 
+In this scenario, we lose one increment, which is why proper atomic operations are needed.</p>
+
+<p>This problem can be solved by using atomic variables. 
+If we wrap the counter in an atomic type and use <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>, the counter will behave as expected, 
+ensuring that increments are not lost while avoiding unnecessary synchronization overhead.</p>
+
+<p>The following code correctly increments the counter.</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="n">counter</span><span class="o">&gt;</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+  <span class="k">auto</span> <span class="n">increment</span> <span class="o">=</span> <span class="p">[]()</span> <span class="p">{</span>
+    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+      <span class="c1">// Specifying the opration to be std::memory_order_relaxed.</span>
+      <span class="n">counter</span><span class="p">.</span><span class="n">fetch_add</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>
+    <span class="p">}</span>
+  <span class="p">};</span>
+  <span class="c1">// Create 3 threads</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">t1</span><span class="p">(</span><span class="n">increment</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">t2</span><span class="p">(</span><span class="n">increment</span><span class="p">);</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">t3</span><span class="p">(</span><span class="n">increment</span><span class="p">);</span>
+  <span class="c1">// Join the threads</span>
+  <span class="n">t1</span><span class="p">.</span><span class="n">join</span><span class="p">();</span> <span class="n">t2</span><span class="p">.</span><span class="n">join</span><span class="p">();</span> <span class="n">t3</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>     
+<span class="p">}</span>
+
+</code></pre></div></div>
+
+<p>Atomics and relaxed memory order gives us 2 guarantees:</p>
+<ul>
+  <li>With more complex types, operations will be atomic, meaning no partial updates. 
+It prevents a scenario where one thread reads part of a variable while another thread updates it, 
+avoiding the possibility of reading inconsistent or “gibberish” data.</li>
+  <li>It also guarantees <strong>coherence</strong>, meaning there is a proper order to the modifications of the variable. 
+<strong>From the variable’s perspective</strong>, there exists a total order in which it was modified, 
+even though threads may not see these updates in the same order.</li>
+</ul>
+
+<p>Relaxed atomics do not provide any synchronization guarantees between threads; 
+for that, we need to use stricter memory orders. 
+However, all the guarantees mentioned above, such as atomicity and coherence, 
+are also provided by the stricter memory orders.</p>
+
+<h2 id="acquire-and-release">Acquire and Release</h2>
+
+<p>Once again, let’s start by looking at a simple problem</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">data</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">flag</span><span class="p">(</span><span class="nb">false</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+  <span class="c1">// Writer thread</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="n">writer</span><span class="p">([]()</span> <span class="p">{</span>
+    <span class="n">data</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>   <span class="c1">// A  store data </span>
+    <span class="n">flag</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="nb">true</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span> <span class="c1">// B  Set flag</span>
+  <span class="p">});</span>
+
+  <span class="c1">// Reader thread</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">reader</span><span class="p">([]()</span> <span class="p">{</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">flag</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">))</span>  <span class="p">{</span> <span class="c1">// C</span>
+      <span class="c1">// Busy wait </span>
+    <span class="p">}</span>
+    <span class="c1">// Read data</span>
+    <span class="kt">int</span> <span class="n">value</span> <span class="o">=</span> <span class="n">data</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span> <span class="c1">// D</span>
+  <span class="p">});</span>
+
+<span class="n">writer</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+<span class="n">reader</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+
+<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>In this example, we have two threads:</p>
+<ul>
+  <li>The writer thread writes data and then sets a flag.</li>
+  <li>The reader thread busy-waits in a loop until the flag is set, and then it reads the data.</li>
+</ul>
+
+<p>It is possible for the reader thread to see <code class="language-plaintext highlighter-rouge">flag = true</code> and <code class="language-plaintext highlighter-rouge">data = 0</code> ?
+In other words, can the reader thread observe the flag set to true while the data has not yet been written?</p>
+
+<p>Let’s draw a graph with the <em>sequenced-before</em> relation and think about it:</p>
+
+<p><img src="../images/blog_2.png" alt="My Image" style="width: 60%" /></p>
+
+<p><strong>It is possible for the reader thread to see the flag as set, without reading the updated data</strong>, 
+meaning the reader could observe flag = true and data = 0. How? 
+The <em>sequenced-before</em> relation <strong>does not extend across threads</strong>; 
+it is only within a single thread that sequenced-before is established. 
+To solve this problem, we need to extend this relation across threads. 
+For that, we use <code class="language-plaintext highlighter-rouge">memory_order::release</code> in the writer and <code class="language-plaintext highlighter-rouge">memory_order::acquire</code> in the reader.</p>
+
+<p>But first, we need to start with the <em>synchronizes-with</em> relation:</p>
+
+<ul>
+  <li><strong><em>synchronizes-with</em></strong> :
+If a store in thread A uses <code class="language-plaintext highlighter-rouge">memory_order::release</code> and a load in thread B uses <code class="language-plaintext highlighter-rouge">memory_order::acquire</code>, 
+and thread B reads the value stored by thread A, then the store in thread A synchronizes with the load in thread B.</li>
+</ul>
+
+<p>As you can see, this relation is formed between two threads: one thread writes a value using <code class="language-plaintext highlighter-rouge">memory_order::release</code>, 
+and the other thread reads that value using <code class="language-plaintext highlighter-rouge">memory_order::acquire</code>. 
+In doing so, they “synchronize.” The key point is that the reading thread must read the value stored 
+by the writing thread for synchronization to occur. 
+This synchronization happens only between the two threads.</p>
+
+<p>Now that we have the synchronizes-with relation, 
+we need one more to fully model this problem (I promise it’s the last one!) called <em>happens-before</em>. 
+This relation is established if any of the following conditions are met:</p>
+
+<ul>
+  <li><strong><em>happens-before</em></strong> : Regardless of threads, evaluation A <strong>happens-before</strong> evaluation B if any of the following is true:
+    <ul>
+      <li>A is <em>sequenced-before</em> B (SB1)</li>
+      <li>A <em>synchronizes-with</em> B (SB2)</li>
+      <li>A <em>happens-before</em> X, and X <em>happens-before</em> B (SB3)</li>
+    </ul>
+  </li>
+</ul>
+
+<p>Now, why is this important? For the following reason:</p>
+
+<ul>
+  <li>The side effect A on some variable X (a write) is visible to value computation B on X (a read) if both of the following are true:
+    <ul>
+      <li>A <em>happens-before</em> B.</li>
+      <li>There is no other side effect on X where A happens-before X and X happens-before B.</li>
+    </ul>
+  </li>
+</ul>
+
+<p>By establishing a <em>happens-before</em> relation, we have a guarantee that all modifications that <em>happens-before</em> a given 
+expression are visible to that expression. This is similar to how sequenced-before works in sequential code.
+From (SB1), it is clear that all <em>sequenced-before</em> relations are also <em>happens-before</em> relations. 
+Looking at our graph, we just need to turn the <em>reads</em> relation into a <em>happens-before</em> relation, and the problem is solved. 
+This guarantees that once we read true in the reader thread, the data write will be visible because it <em>happens-before</em> the read of the true value. 
+In this way, we can “extend” the <em>sequenced-before</em> relationship between two threads.</p>
+
+<p>To achieve this, we utilize (SB2). 
+By turning the reads relation into a <em>synchronizes-with</em> relation, it essentially becomes <em>sequenced-before</em> as per (SB2). 
+As we established earlier, <em>synchronizes-with</em> is achieved using a pair of <code class="language-plaintext highlighter-rouge">memory_order::acquire</code> and <code class="language-plaintext highlighter-rouge">memory_order::release</code>. 
+To modify the code, we do the following:</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">data</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+<span class="n">std</span><span class="o">::</span><span class="n">atomic</span><span class="o">&lt;</span><span class="kt">bool</span><span class="o">&gt;</span> <span class="n">flag</span><span class="p">(</span><span class="nb">false</span><span class="p">);</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span> <span class="p">{</span>
+  <span class="c1">// Writer thread</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="n">writer</span><span class="p">([]()</span> <span class="p">{</span>
+    <span class="n">data</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">42</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>   <span class="c1">// A  store data </span>
+    <span class="n">flag</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="nb">true</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span> <span class="c1">// B  Set flag</span>
+  <span class="p">});</span>
+
+  <span class="c1">// Reader thread</span>
+  <span class="n">std</span><span class="o">::</span><span class="kr">thread</span> <span class="nf">reader</span><span class="p">([]()</span> <span class="p">{</span>
+    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">flag</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">))</span>  <span class="p">{</span> <span class="c1">// C</span>
+      <span class="c1">// Busy wait </span>
+    <span class="p">}</span>
+    <span class="c1">// Read data</span>
+    <span class="kt">int</span> <span class="n">value</span> <span class="o">=</span> <span class="n">data</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span> <span class="c1">// D</span>
+  <span class="p">});</span>
+
+<span class="n">writer</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+<span class="n">reader</span><span class="p">.</span><span class="n">join</span><span class="p">();</span>
+
+<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>This translates into the following graph:</p>
+
+<p><img src="../images/blog_3.png" alt="My Image" style="width: 60%" /></p>
+
+<p>As the graph illustrates, A <em>happens-before</em> B, B <em>happens-before</em> C, and C <em>happens-before</em> D, therefore A <em>happens-before</em> D 
+(as per SB3). 
+Thus, we have a guarantee that once the reader thread reads true from the flag variable, 
+it must also see the modification of the data variable.</p>
+
+<p>Note that the data store and load operations are still using <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>.</p>
+
+<p>The acquire and release memory orders allow us to form a <em>synchronizes-with</em> relation, 
+which in turn establishes a <em>happens-before</em> relationship between threads. 
+This gives programmers a guarantee that all modifications made by the releasing thread are visible to the 
+acquiring thread when it reads the stored value.</p>
+
+<p>However, it’s important to note that this does not guarantee the acquiring thread will always see the value stored by the 
+releasing thread. If another thread modifies the data, 
+the acquiring thread might see a “newer” value written by the third thread, or it might not, 
+depending on timing. The only guarantee is that the acquiring thread will see all modifications made by the releasing thread.</p>
+
+<h2 id="worked-example">Worked example</h2>
+
+<p>There are a couple of good examples on cppreference, and we’ll work through one of them right here.</p>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Thread 1:</span>
+<span class="n">r1</span> <span class="o">=</span> <span class="n">x</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>  <span class="c1">// A</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">r1</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+  <span class="n">y</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span> <span class="c1">// B</span>
+<span class="c1">// Thread 2:</span>
+<span class="n">r2</span> <span class="o">=</span> <span class="n">y</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span>  <span class="c1">// C</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">r2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+  <span class="n">x</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span> <span class="c1">// D</span>
+</code></pre></div></div>
+
+<p>In this case <code class="language-plaintext highlighter-rouge">r</code> variables are local variables (shorthand for registers). The question is is it possible
+for that the program ends with <code class="language-plaintext highlighter-rouge">r1==1</code> and <code class="language-plaintext highlighter-rouge">r2==1</code> ?</p>
+
+<p>Let’s model this scenario with a graph.</p>
+
+<p><img src="../images/blog_6.png" alt="My Image" style="width: 60%" /></p>
+
+<p>Given that all operations use <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>, no <em>synchronizes-with</em> relation is formed, 
+meaning there is no <em>happens-before</em> relation between the threads.</p>
+
+<p>For the program to end with <code class="language-plaintext highlighter-rouge">r1 == 1</code> and <code class="language-plaintext highlighter-rouge">r2 == 1</code>, D would have to occur before A, and B would have to occur before C. 
+However, this contradicts the <em>sequenced-before</em> relation established within each individual threads. 
+And that’s completely fine, according to the memory model! The <em>sequenced-before</em> relation only applies within individual threads. 
+Each thread can perceive a different modification order, meaning each thread sees its own “reality” or state of memory. 
+They do not need to agree on a single total modification order across all threads.</p>
+
+<p>The answer is <strong>YES</strong>, the result <code class="language-plaintext highlighter-rouge">r1 == 1</code> and <code class="language-plaintext highlighter-rouge">r2 == 1</code> is allowed by the memory model. 
+From the perspective of individual variables, such as x, nothing prevents D from appearing before A 
+in the modification order of that variable. 
+However, each thread can observe the modifications in a different order. 
+Once again, there is no global consensus among threads on the modification order. 
+Such consensus can be achieved with <code class="language-plaintext highlighter-rouge">memory_order::seq_cst</code>, but not with <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>.</p>
+
+<p>This type of issue is referred to as <strong>out-of-thin-air</strong> values because it appears as though the values come from nowhere. 
+The memory model permits this behavior. However, the C++ standard discourages such behavior in implementations:</p>
+<blockquote>
+  <p>This recommendation discourages producing r1 == r2 == 42, since the store of 42 to y is only possible if the store
+to x stores 42, which circularly depends on the store to y storing 42. Note that without this restriction, such an
+execution is possible.</p>
+</blockquote>
+
+<div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Thread 1:</span>
+<span class="n">r1</span> <span class="o">=</span> <span class="n">x</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>  <span class="c1">// A</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">r1</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+  <span class="n">y</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span> <span class="c1">// B</span>
+<span class="c1">// Thread 2:</span>
+<span class="n">r2</span> <span class="o">=</span> <span class="n">y</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_acquire</span><span class="p">);</span>  <span class="c1">// C</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">r2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+  <span class="n">x</span><span class="p">.</span><span class="n">store</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">std</span><span class="o">::</span><span class="n">memory_order_release</span><span class="p">);</span> <span class="c1">// D</span>
+</code></pre></div></div>
+
+<p>Is it possible for the program to end with <code class="language-plaintext highlighter-rouge">r1 == 1</code> and <code class="language-plaintext highlighter-rouge">r2 == 1</code>? Let’s draw a graph to visualize this.</p>
+
+<p><img src="../images/blog_5.png" alt="Graph illustrating execution" style="width: 60%" /></p>
+
+<p>In the graph, we can clearly see a cycle. 
+The difference is that the memory model forbids such cycles with <em>happens-before</em> relation. 
+Therefore, this execution cannot happen. The answer is <strong>NO</strong>.</p>
+
+<p>As you may have noticed, we haven’t yet covered the <code class="language-plaintext highlighter-rouge">seq_cst</code> memory order. 
+In the next part, we will explore this memory order in detail along with additional worked examples.</p>
+
+<h5 id="references">References</h5>
+
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:1" role="doc-endnote">
+      <p><a href="https://doc.rust-lang.org/std/sync/atomic/">Rust atomics</a> <a href="#fnref:1" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>
+
+</div>
+
+
+
+<div class="pagination">
+  
+  
+
+  <a href="#" class="top">Top</a>
+</div>
+
+    </main>
+
+    <!--<footer>
+  <span>
+    &copy; <time datetime="2024-09-20 00:13:41 +0200">2024</time> Chester How. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+  </span>
+</footer>
+-->
+  </body>
+</html>
