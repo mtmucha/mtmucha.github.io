@@ -1,6 +1,6 @@
 # Site settings
 title:          Home
-description:    "Minimal Jekyll theme for storytellers"
+description:    "Welcome to my blog! Here, I write articles about technical topics, currently focusing on C++ and concurrency. My aim is to share clear and practical explanations that I personally find helpful for understanding complex concepts."
 url:            "https://chesterhow.github.io"
 
 # Google Analytics
