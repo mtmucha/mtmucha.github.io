@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2024-09-20T00:13:41+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Home</title><subtitle>Minimal Jekyll theme for storytellers</subtitle><author><name>Chester How</name><email>chesterhow@gmail.com</email></author><entry><title type="html">Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)</title><link href="http://localhost:4000/2024-08-05/introduction-to-atomics-1" rel="alternate" type="text/html" title="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" /><published>2024-08-05T12:00:00+02:00</published><updated>2024-08-05T12:00:00+02:00</updated><id>http://localhost:4000/2024-08-05/introduction-to-atomics-1</id><content type="html" xml:base="http://localhost:4000/2024-08-05/introduction-to-atomics-1"><![CDATA[<p>Atomic variables and operations may seem straightforward at first glance. 
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2024-09-22T14:08:48+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Home</title><subtitle>Welcome to my blog! Here, I write articles about technical topics, currently focusing on C++ and concurrency. My aim is to share clear and practical explanations that I personally find helpful for understanding complex concepts.</subtitle><author><name>Chester How</name><email>chesterhow@gmail.com</email></author><entry><title type="html">Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)</title><link href="http://localhost:4000/2024-08-05/introduction-to-atomics-1" rel="alternate" type="text/html" title="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" /><published>2024-08-05T12:00:00+02:00</published><updated>2024-08-05T12:00:00+02:00</updated><id>http://localhost:4000/2024-08-05/introduction-to-atomics-1</id><content type="html" xml:base="http://localhost:4000/2024-08-05/introduction-to-atomics-1"><![CDATA[<p>Atomic variables and operations may seem straightforward at first glance. 
 But did you know that you can specify a <code class="language-plaintext highlighter-rouge">memory_order</code> for individual atomic operations? Why is this useful? 
 By adjusting memory ordering, we can relax certain synchronization guarantees, which can lead to significant performance improvements. 
 There’s more to atomics than just ensuring “atomicity” in the sense of updates happening in a “single operation.”</p>
@@ -54,7 +54,7 @@ execution we think from top to bottom.</p>
 <div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">foo</span><span class="p">()</span> <span class="p">{</span>
   <span class="kt">int</span> <span class="n">x</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// A</span>
   <span class="kt">int</span> <span class="n">y</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>  <span class="c1">// B</span>
-  <span class="kt">int</span> <span class="n">z</span> <span class="o">=</span> <span class="n">x</span> <span class="o">+</span> <span class="n">y</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">;</span> <span class="c1">// C</span>
+  <span class="kt">int</span> <span class="n">z</span> <span class="o">=</span> <span class="n">x</span><span class="p">;</span>  <span class="c1">// C</span>
 <span class="p">}</span>
 </code></pre></div></div>
 
@@ -87,14 +87,11 @@ definition and rules you can refer to C++ standard.</p>
 
 <p>We can create a graph using this relation :</p>
 
-<p><img src="../images/Blog_1.png" alt="My Image" style="width: 30%" /></p>
+<p><img src="../images/Blog_1(1).png" alt="My Image" style="width: 30%" /></p>
 
-<p>This graph is very simple. The <em>W(x)</em> signifies store into variable <em>x</em> and <em>R(x)</em> represents read(load) from variable <em>x</em>, and <em>SEQ</em> 
+<p>This graph is very simple. The <em>W(x)</em> signifies store into variable <em>x</em> and <em>R(z)</em> represents read(load) into variable <em>z</em>, and <em>SEQ</em> 
 is <em>sequenced-before</em> relation. Further down we will use the same notation in a bit more complicated graphs
 to show how different memroy orders form relations.</p>
-
-<p>We could also create a more detialed graph where we turn to change the <em>W(z)</em> expression, however, it is not important
-right know, we wanted to illustrate the <em>sequenced-before</em> relation.</p>
 
 <h2 id="relaxed">Relaxed</h2>
 
@@ -124,12 +121,15 @@ However, we are using an ordinary int for the counter. So, what can possibly go 
 <p>Could we see a negative value? A typical illustrative problem occurs when one thread is reading while another is writing, 
 causing the reading thread to potentially read gibberish. 
 But does that really happen? It depends. For instance, on x86-64, a properly aligned int value is “atomic” 
-in the sense that updates and reads happen as one operation. 
+in the sense that reads and and writes happen as one operation. 
 This is due to how the hardware handles reads and writes, ensuring that these operations are atomic at the hardware level.
-A scenario where we would read a negative value cannot happen on x86-64.</p>
+If it was not aligned properly, the CPU would need to do 2 reads to read the whole value.
+A scenario where we would read a negative value cannot happen on properly aligned int on x86-64.</p>
 
-<p>Given that this is already “atomic” at the hardware level, do we still need an atomic operation for this? 
-It turns out we do. What we are not guaranteed is the <strong>coherence of the variable’s modification order</strong>. 
+<p>Given that individual read and write operations may be ‘atomic’ at the hardware level, 
+do we still need to use atomic operations in our code? It turns out we do. 
+Incrementing a variable involves multiple steps: reading its current value, 
+adding one, and writing the new value back. 
 If we run this program multiple times, we might observe that the counter is not equal to 30, but instead, for example, 25. 
 Imagine two threads both read the value 5 from the counter; 
 one thread stores 6 in the counter, and then the second thread does the same. 
@@ -165,9 +165,7 @@ ensuring that increments are not lost while avoiding unnecessary synchronization
   <li>With more complex types, operations will be atomic, meaning no partial updates. 
 It prevents a scenario where one thread reads part of a variable while another thread updates it, 
 avoiding the possibility of reading inconsistent or “gibberish” data.</li>
-  <li>It also guarantees <strong>coherence</strong>, meaning there is a proper order to the modifications of the variable. 
-<strong>From the variable’s perspective</strong>, there exists a total order in which it was modified, 
-even though threads may not see these updates in the same order.</li>
+  <li>Ensures that operations such as incrementing a variable act as single, indivisible actions.</li>
 </ul>
 
 <p>Relaxed atomics do not provide any synchronization guarantees between threads; 
@@ -194,7 +192,6 @@ are also provided by the stricter memory orders.</p>
     <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">flag</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">))</span>  <span class="p">{</span> <span class="c1">// C</span>
       <span class="c1">// Busy wait </span>
     <span class="p">}</span>
-    <span class="c1">// Read data</span>
     <span class="kt">int</span> <span class="n">value</span> <span class="o">=</span> <span class="n">data</span><span class="p">.</span><span class="n">load</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">memory_order_relaxed</span><span class="p">);</span> <span class="c1">// D</span>
   <span class="p">});</span>
 
@@ -216,7 +213,7 @@ In other words, can the reader thread observe the flag set to true while the dat
 
 <p>Let’s draw a graph with the <em>sequenced-before</em> relation and think about it:</p>
 
-<p><img src="../images/blog_2.png" alt="My Image" style="width: 60%" /></p>
+<p><img src="../images/blog_2(3).png" alt="My Image" style="width: 60%" /></p>
 
 <p><strong>It is possible for the reader thread to see the flag as set, without reading the updated data</strong>, 
 meaning the reader could observe flag = true and data = 0. How? 
@@ -304,7 +301,7 @@ To modify the code, we do the following:</p>
 
 <p>This translates into the following graph:</p>
 
-<p><img src="../images/blog_3.png" alt="My Image" style="width: 60%" /></p>
+<p><img src="../images/blog_3(2).png" alt="My Image" style="width: 60%" /></p>
 
 <p>As the graph illustrates, A <em>happens-before</em> B, B <em>happens-before</em> C, and C <em>happens-before</em> D, therefore A <em>happens-before</em> D 
 (as per SB3). 

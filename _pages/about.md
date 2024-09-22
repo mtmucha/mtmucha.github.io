@@ -1,8 +1,8 @@
 ---
-layout: post
+layout: about
 title: "About"
 author: "Martin"
-permalink: /about/
+permalink: /about
 ---
 
 Welcome to my blog! Here, I write articles about technical topics, currently in areas like C++, 

@@ -61,7 +61,7 @@ execution we think from top to bottom.
 void foo() {
   int x = 1;  // A
   int y = 1;  // B
-  int z = x + y + 1 ; // C
+  int z = x;  // C
 }
 ```
 
@@ -89,14 +89,11 @@ definition and rules you can refer to C++ standard.
 
 We can create a graph using this relation : 
 
-<img src="../images/Blog_1.png" alt="My Image" style="width: 30%">
+<img src="../images/Blog_1(1).png" alt="My Image" style="width: 30%">
 
-This graph is very simple. The *W(x)* signifies store into variable *x* and *R(x)* represents read(load) from variable *x*, and *SEQ* 
+This graph is very simple. The *W(x)* signifies store into variable *x* and *R(z)* represents read(load) into variable *z*, and *SEQ* 
 is *sequenced-before* relation. Further down we will use the same notation in a bit more complicated graphs
 to show how different memroy orders form relations.
-
-We could also create a more detialed graph where we turn to change the *W(z)* expression, however, it is not important
-right know, we wanted to illustrate the *sequenced-before* relation.
 
 ## Relaxed 
 
@@ -127,12 +124,15 @@ However, we are using an ordinary int for the counter. So, what can possibly go 
 Could we see a negative value? A typical illustrative problem occurs when one thread is reading while another is writing, 
 causing the reading thread to potentially read gibberish. 
 But does that really happen? It depends. For instance, on x86-64, a properly aligned int value is "atomic" 
-in the sense that updates and reads happen as one operation. 
+in the sense that reads and and writes happen as one operation. 
 This is due to how the hardware handles reads and writes, ensuring that these operations are atomic at the hardware level.
-A scenario where we would read a negative value cannot happen on x86-64.
+If it was not aligned properly, the CPU would need to do 2 reads to read the whole value.
+A scenario where we would read a negative value cannot happen on properly aligned int on x86-64.
 
-Given that this is already "atomic" at the hardware level, do we still need an atomic operation for this? 
-It turns out we do. What we are not guaranteed is the **coherence of the variable's modification order**. 
+Given that individual read and write operations may be 'atomic' at the hardware level, 
+do we still need to use atomic operations in our code? It turns out we do. 
+Incrementing a variable involves multiple steps: reading its current value, 
+adding one, and writing the new value back. 
 If we run this program multiple times, we might observe that the counter is not equal to 30, but instead, for example, 25. 
 Imagine two threads both read the value 5 from the counter; 
 one thread stores 6 in the counter, and then the second thread does the same. 
@@ -168,9 +168,7 @@ Atomics and relaxed memory order gives us 2 guarantees:
 - With more complex types, operations will be atomic, meaning no partial updates. 
   It prevents a scenario where one thread reads part of a variable while another thread updates it, 
   avoiding the possibility of reading inconsistent or "gibberish" data.
-- It also guarantees **coherence**, meaning there is a proper order to the modifications of the variable. 
-  **From the variable's perspective**, there exists a total order in which it was modified, 
-  even though threads may not see these updates in the same order. 
+- Ensures that operations such as incrementing a variable act as single, indivisible actions.
 
 Relaxed atomics do not provide any synchronization guarantees between threads; 
 for that, we need to use stricter memory orders. 
@@ -197,7 +195,6 @@ int main() {
     while (!flag.load(std::memory_order_relaxed))  { // C
       // Busy wait 
     }
-    // Read data
     int value = data.load(std::memory_order_relaxed); // D
   });
 
@@ -218,7 +215,7 @@ In other words, can the reader thread observe the flag set to true while the dat
 
 Let's draw a graph with the *sequenced-before* relation and think about it:
 
-<img src="../images/blog_2.png" alt="My Image" style="width: 60%">
+<img src="../images/blog_2(3).png" alt="My Image" style="width: 60%">
 
 **It is possible for the reader thread to see the flag as set, without reading the updated data**, 
 meaning the reader could observe flag = true and data = 0. How? 
@@ -296,7 +293,7 @@ return 0;
 
 This translates into the following graph:
 
-<img src="../images/blog_3.png" alt="My Image" style="width: 60%">
+<img src="../images/blog_3(2).png" alt="My Image" style="width: 60%">
 
 
 As the graph illustrates, A *happens-before* B, B *happens-before* C, and C *happens-before* D, therefore A *happens-before* D 
