@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2024-09-22T14:20:25+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Home</title><subtitle>Welcome to my blog! Here, I write articles about technical topics, currently focusing on C++ and concurrency. My aim is to share clear and practical explanations that I personally find helpful for understanding complex concepts.</subtitle><author><name>Chester How</name><email>chesterhow@gmail.com</email></author><entry><title type="html">Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)</title><link href="http://localhost:4000/2024-08-05/introduction-to-atomics-1" rel="alternate" type="text/html" title="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" /><published>2024-08-05T12:00:00+02:00</published><updated>2024-08-05T12:00:00+02:00</updated><id>http://localhost:4000/2024-08-05/introduction-to-atomics-1</id><content type="html" xml:base="http://localhost:4000/2024-08-05/introduction-to-atomics-1"><![CDATA[<p>Atomic variables and operations may seem straightforward at first glance. 
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2024-09-22T19:44:11+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Home</title><subtitle>Welcome to my blog! Here, I write articles about technical topics, currently focusing on C++ and concurrency. My aim is to share clear and practical explanations that I personally find helpful for understanding complex concepts.</subtitle><author><name>Chester How</name><email>chesterhow@gmail.com</email></author><entry><title type="html">Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)</title><link href="http://localhost:4000/2024-08-05/introduction-to-atomics-1" rel="alternate" type="text/html" title="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" /><published>2024-08-05T12:00:00+02:00</published><updated>2024-08-05T12:00:00+02:00</updated><id>http://localhost:4000/2024-08-05/introduction-to-atomics-1</id><content type="html" xml:base="http://localhost:4000/2024-08-05/introduction-to-atomics-1"><![CDATA[<p>Atomic variables and operations may seem straightforward at first glance. 
 But did you know that you can specify a <code class="language-plaintext highlighter-rouge">memory_order</code> for individual atomic operations? Why is this useful? 
 By adjusting memory ordering, we can relax certain synchronization guarantees, which can lead to significant performance improvements. 
 There’s more to atomics than just ensuring “atomicity” in the sense of updates happening in a “single operation.”</p>
@@ -87,7 +87,7 @@ definition and rules you can refer to C++ standard.</p>
 
 <p>We can create a graph using this relation :</p>
 
-<p><img src="../images/Blog_1(1).png" alt="My Image" style="width: 30%" /></p>
+<p><img src="../images/blog_1.png" alt="My Image" style="width: 30%" /></p>
 
 <p>This graph is very simple. The <em>W(x)</em> signifies store into variable <em>x</em> and <em>R(z)</em> represents read(load) into variable <em>z</em>, and <em>SEQ</em> 
 is <em>sequenced-before</em> relation. Further down we will use the same notation in a bit more complicated graphs
@@ -166,11 +166,14 @@ ensuring that increments are not lost while avoiding unnecessary synchronization
 It prevents a scenario where one thread reads part of a variable while another thread updates it, 
 avoiding the possibility of reading inconsistent or “gibberish” data.</li>
   <li>Ensures that operations such as incrementing a variable act as single, indivisible actions.</li>
+  <li>Making a variable atomic also guarantees <strong>coherence</strong>. 
+This means there is a single total order, <strong>from the perspective of the variable</strong>, in which all modifications occur. 
+This concept will become important later when we discuss acquire and release semantics.</li>
 </ul>
 
 <p>Relaxed atomics do not provide any synchronization guarantees between threads; 
 for that, we need to use stricter memory orders. 
-However, all the guarantees mentioned above, such as atomicity, 
+However, all the guarantees mentioned above, such as atomicity and coherence, 
 are also provided by the stricter memory orders.</p>
 
 <h2 id="acquire-and-release">Acquire and Release</h2>
@@ -208,15 +211,20 @@ are also provided by the stricter memory orders.</p>
   <li>The reader thread busy-waits in a loop until the flag is set, and then it reads the data.</li>
 </ul>
 
-<p>It is possible for the reader thread to see <code class="language-plaintext highlighter-rouge">flag = true</code> and <code class="language-plaintext highlighter-rouge">data = 0</code> ?
+<p>It is possible for the reader thread to see <code class="language-plaintext highlighter-rouge">flag == true</code> and <code class="language-plaintext highlighter-rouge">data == 0</code> ?
 In other words, can the reader thread observe the flag set to true while the data has not yet been written?</p>
 
 <p>Let’s draw a graph with the <em>sequenced-before</em> relation and think about it:</p>
 
-<p><img src="../images/blog_2(3).png" alt="My Image" style="width: 60%" /></p>
+<p><img src="../images/blog_2.png" alt="My Image" style="width: 60%" /></p>
+
+<p>The reads relation indicates that a read operation must retrieve the value stored by a prior write. 
+This relationship is directional in that the read must occur after the write to read the stored value. 
+This is simple reads from relation, it is not a <em>sequenced-before</em> relation because the read and write happen on different threads. 
+Now, considering this model, is it possible for the reading thread to observe the flag being set while the data remains unset?</p>
 
 <p><strong>It is possible for the reader thread to see the flag as set, without reading the updated data</strong>, 
-meaning the reader could observe flag = true and data = 0. How? 
+meaning the reader could observe <code class="language-plaintext highlighter-rouge">flag == true</code> and <code class="language-plaintext highlighter-rouge">data == 0</code>. How? 
 The <em>sequenced-before</em> relation <strong>does not extend across threads</strong>; 
 it is only within a single thread that sequenced-before is established. 
 To solve this problem, we need to extend this relation across threads. 
@@ -227,7 +235,7 @@ For that, we use <code class="language-plaintext highlighter-rouge">memory_order
 <ul>
   <li><strong><em>synchronizes-with</em></strong> :
 If a store in thread A uses <code class="language-plaintext highlighter-rouge">memory_order::release</code> and a load in thread B uses <code class="language-plaintext highlighter-rouge">memory_order::acquire</code>, 
-and thread B reads the value stored by thread A, then the store in thread A synchronizes with the load in thread B.</li>
+and <strong>thread B reads the value stored by thread A</strong>, then the store in thread A <em>synchronizes-with</em> the load in thread B.</li>
 </ul>
 
 <p>As you can see, this relation is formed between two threads: one thread writes a value using <code class="language-plaintext highlighter-rouge">memory_order::release</code>, 
@@ -241,7 +249,7 @@ we need one more to fully model this problem (I promise it’s the last one!) ca
 This relation is established if any of the following conditions are met:</p>
 
 <ul>
-  <li><strong><em>happens-before</em></strong> : Regardless of threads, evaluation A <strong>happens-before</strong> evaluation B if any of the following is true:
+  <li><strong><em>happens-before</em></strong> : Regardless of threads, evaluation A <em>happens-before</em> evaluation B if any of the following is true:
     <ul>
       <li>A is <em>sequenced-before</em> B (SB1)</li>
       <li>A <em>synchronizes-with</em> B (SB2)</li>
@@ -301,7 +309,7 @@ To modify the code, we do the following:</p>
 
 <p>This translates into the following graph:</p>
 
-<p><img src="../images/blog_3(2).png" alt="My Image" style="width: 60%" /></p>
+<p><img src="../images/blog_3.png" alt="My Image" style="width: 60%" /></p>
 
 <p>As the graph illustrates, A <em>happens-before</em> B, B <em>happens-before</em> C, and C <em>happens-before</em> D, therefore A <em>happens-before</em> D 
 (as per SB3). 
@@ -320,6 +328,13 @@ releasing thread. If another thread modifies the data,
 the acquiring thread might see a “newer” value written by the third thread, or it might not, 
 depending on timing. The only guarantee is that the acquiring thread will see all modifications made by the releasing thread.</p>
 
+<p>We previously mentioned the <strong>coherence</strong> of atomic variable modifications. 
+This is closely related to the <em>happens-before</em> relationship. 
+If operation A <em>happens-before</em> operation B, then operation A will also appear before operation B 
+in the total modification order of the variable. This order is observed from the perspective of the variable, 
+meaning not all threads need to agree on the same modification order—they may perceive a different one. 
+We’ll explore this in more detail in our worked example.</p>
+
 <h2 id="worked-example">Worked example</h2>
 
 <p>There are a couple of good examples on cppreference, and we’ll work through one of them right here.</p>
@@ -337,32 +352,34 @@ depending on timing. The only guarantee is that the acquiring thread will see al
 <p>In this case <code class="language-plaintext highlighter-rouge">r</code> variables are local variables (shorthand for registers). The question is is it possible
 for that the program ends with <code class="language-plaintext highlighter-rouge">r1==1</code> and <code class="language-plaintext highlighter-rouge">r2==1</code> ?</p>
 
+<p>Given that all operations use <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>, no <em>synchronizes-with</em> relation is formed, 
+meaning there is no <em>happens-before</em> relation between threads.</p>
+
 <p>Let’s model this scenario with a graph.</p>
 
-<p><img src="../images/blog_6(1).png" alt="My Image" style="width: 60%" /></p>
+<p><img src="../images/blog_4.png" alt="My Image" style="width: 60%" /></p>
 
-<p>Given that all operations use <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>, no <em>synchronizes-with</em> relation is formed, 
-meaning there is no <em>happens-before</em> relation between the threads.</p>
-
-<p>For the program to end with <code class="language-plaintext highlighter-rouge">r1 == 1</code> and <code class="language-plaintext highlighter-rouge">r2 == 1</code>, D would have to occur before A, and B would have to occur before C. 
-However, this contradicts the <em>sequenced-before</em> relation established within each individual threads. 
-And that’s completely fine, according to the memory model! The <em>sequenced-before</em> relation only applies within individual threads. 
-Each thread can perceive a different modification order, meaning each thread sees its own “reality” or state of memory. 
-They do not need to agree on a single total modification order across all threads.</p>
+<p>For the program to end with <code class="language-plaintext highlighter-rouge">r1 == 1</code> and <code class="language-plaintext highlighter-rouge">r2 == 1</code>, D would have to occur before A, 
+and B would have to occur before C. We can observe a cycle in the graph; however, 
+these are only reads relations and <em>sequenced-before</em>. 
+While <em>sequenced-before</em> can be transformed into <em>happens-before</em>, the reads relations cannot and
+D occurring before A and B occurring before C does not violate these <em>happens-before</em> relationships.</p>
 
 <p>The answer is <strong>YES</strong>, the result <code class="language-plaintext highlighter-rouge">r1 == 1</code> and <code class="language-plaintext highlighter-rouge">r2 == 1</code> is allowed by the memory model. 
-From the perspective of individual variables, such as x, nothing prevents D from appearing before A 
-in the modification order of that variable. 
-However, each thread can observe the modifications in a different order. 
-Once again, there is no global consensus among threads on the modification order. 
+From the perspective of individual variables, such as x, 
+nothing prevents operation D from appearing before operation A in the modification order of that variable. 
+The only thing that prevents this is the <em>happens-before</em> relationship, which cannot be established with <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>
+(between thread).
+Therefore, each thread can observe the modifications in a different order. 
+Once again, there is no global consensus among threads on the modification order.
 Such consensus can be achieved with <code class="language-plaintext highlighter-rouge">memory_order::seq_cst</code>, but not with <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>.</p>
 
 <p>This type of issue is referred to as <strong>out-of-thin-air</strong> values because it appears as though the values come from nowhere. 
 The memory model permits this behavior. However, the C++ standard discourages such behavior in implementations:</p>
 <blockquote>
-  <p>This recommendation discourages producing r1 == r2 == 42, since the store of 42 to y is only possible if the store
+  <p>This recommendation discourages producing r1 == r2 == 42, since the store of 1 to y is only possible if the store
 to x stores 42, which circularly depends on the store to y storing 42. Note that without this restriction, such an
-execution is possible.</p>
+execution is possible. (same example with different values in the standard)</p>
 </blockquote>
 
 <div class="language-cpp highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// Thread 1:</span>
@@ -380,7 +397,8 @@ execution is possible.</p>
 <p><img src="../images/blog_5.png" alt="Graph illustrating execution" style="width: 60%" /></p>
 
 <p>In the graph, we can clearly see a cycle. 
-The difference is that the memory model forbids such cycles with <em>happens-before</em> relation. 
+The difference is that the memory model forbids such cycles with <em>happens-before</em> relation. This would
+also imply cycle in total order of the modification of the variable(coherence).
 Therefore, this execution cannot happen. The answer is <strong>NO</strong>.</p>
 
 <p>As you may have noticed, we haven’t yet covered the <code class="language-plaintext highlighter-rouge">seq_cst</code> memory order. 

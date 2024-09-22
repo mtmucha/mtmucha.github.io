@@ -89,7 +89,7 @@ definition and rules you can refer to C++ standard.
 
 We can create a graph using this relation : 
 
-<img src="../images/Blog_1(1).png" alt="My Image" style="width: 30%">
+<img src="../images/blog_1.png" alt="My Image" style="width: 30%">
 
 This graph is very simple. The *W(x)* signifies store into variable *x* and *R(z)* represents read(load) into variable *z*, and *SEQ* 
 is *sequenced-before* relation. Further down we will use the same notation in a bit more complicated graphs
@@ -169,10 +169,15 @@ Atomics and relaxed memory order gives us 2 guarantees:
   It prevents a scenario where one thread reads part of a variable while another thread updates it, 
   avoiding the possibility of reading inconsistent or "gibberish" data.
 - Ensures that operations such as incrementing a variable act as single, indivisible actions.
+- Making a variable atomic also guarantees **coherence**. 
+  This means there is a single total order, **from the perspective of the variable**, in which all modifications occur. 
+  This concept will become important later when we discuss acquire and release semantics.
+
+
 
 Relaxed atomics do not provide any synchronization guarantees between threads; 
 for that, we need to use stricter memory orders. 
-However, all the guarantees mentioned above, such as atomicity, 
+However, all the guarantees mentioned above, such as atomicity and coherence, 
 are also provided by the stricter memory orders.
 
 ## Acquire and Release 
@@ -210,15 +215,20 @@ In this example, we have two threads:
 - The writer thread writes data and then sets a flag.
 - The reader thread busy-waits in a loop until the flag is set, and then it reads the data.
 
-It is possible for the reader thread to see `flag = true` and `data = 0` ?
+It is possible for the reader thread to see `flag == true` and `data == 0` ?
 In other words, can the reader thread observe the flag set to true while the data has not yet been written?
 
 Let's draw a graph with the *sequenced-before* relation and think about it:
 
-<img src="../images/blog_2(3).png" alt="My Image" style="width: 60%">
+<img src="../images/blog_2.png" alt="My Image" style="width: 60%">
+
+The reads relation indicates that a read operation must retrieve the value stored by a prior write. 
+This relationship is directional in that the read must occur after the write to read the stored value. 
+This is simple reads from relation, it is not a *sequenced-before* relation because the read and write happen on different threads. 
+Now, considering this model, is it possible for the reading thread to observe the flag being set while the data remains unset?
 
 **It is possible for the reader thread to see the flag as set, without reading the updated data**, 
-meaning the reader could observe flag = true and data = 0. How? 
+meaning the reader could observe `flag == true` and `data == 0`. How? 
 The *sequenced-before* relation **does not extend across threads**; 
 it is only within a single thread that sequenced-before is established. 
 To solve this problem, we need to extend this relation across threads. 
@@ -228,7 +238,7 @@ But first, we need to start with the *synchronizes-with* relation:
 
 - ***synchronizes-with*** :
 If a store in thread A uses `memory_order::release` and a load in thread B uses `memory_order::acquire`, 
-and thread B reads the value stored by thread A, then the store in thread A synchronizes with the load in thread B.
+and **thread B reads the value stored by thread A**, then the store in thread A *synchronizes-with* the load in thread B.
 
 As you can see, this relation is formed between two threads: one thread writes a value using `memory_order::release`, 
 and the other thread reads that value using `memory_order::acquire`. 
@@ -240,7 +250,7 @@ Now that we have the synchronizes-with relation,
 we need one more to fully model this problem (I promise it's the last one!) called *happens-before*. 
 This relation is established if any of the following conditions are met:
 
-- ***happens-before*** : Regardless of threads, evaluation A **happens-before** evaluation B if any of the following is true:
+- ***happens-before*** : Regardless of threads, evaluation A *happens-before* evaluation B if any of the following is true:
   - A is *sequenced-before* B (SB1)
   - A *synchronizes-with* B (SB2)
   - A *happens-before* X, and X *happens-before* B (SB3)
@@ -293,7 +303,7 @@ return 0;
 
 This translates into the following graph:
 
-<img src="../images/blog_3(2).png" alt="My Image" style="width: 60%">
+<img src="../images/blog_3.png" alt="My Image" style="width: 60%">
 
 
 As the graph illustrates, A *happens-before* B, B *happens-before* C, and C *happens-before* D, therefore A *happens-before* D 
@@ -313,6 +323,13 @@ releasing thread. If another thread modifies the data,
 the acquiring thread might see a "newer" value written by the third thread, or it might not, 
 depending on timing. The only guarantee is that the acquiring thread will see all modifications made by the releasing thread.
 
+We previously mentioned the **coherence** of atomic variable modifications. 
+This is closely related to the *happens-before* relationship. 
+If operation A *happens-before* operation B, then operation A will also appear before operation B 
+in the total modification order of the variable. This order is observed from the perspective of the variable, 
+meaning not all threads need to agree on the same modification order—they may perceive a different one. 
+We'll explore this in more detail in our worked example.
+
 ## Worked example
 
 There are a couple of good examples on cppreference, and we’ll work through one of them right here.
@@ -331,31 +348,34 @@ if (r2 == 1)
 In this case `r` variables are local variables (shorthand for registers). The question is is it possible
 for that the program ends with `r1==1` and `r2==1` ? 
 
+Given that all operations use `memory_order::relaxed`, no *synchronizes-with* relation is formed, 
+meaning there is no *happens-before* relation between threads.
+
 Let’s model this scenario with a graph.
 
-<img src="../images/blog_6(1).png" alt="My Image" style="width: 60%">
+<img src="../images/blog_4.png" alt="My Image" style="width: 60%">
 
-Given that all operations use `memory_order::relaxed`, no *synchronizes-with* relation is formed, 
-meaning there is no *happens-before* relation between the threads.
 
-For the program to end with `r1 == 1` and `r2 == 1`, D would have to occur before A, and B would have to occur before C. 
-However, this contradicts the *sequenced-before* relation established within each individual threads. 
-And that’s completely fine, according to the memory model! The *sequenced-before* relation only applies within individual threads. 
-Each thread can perceive a different modification order, meaning each thread sees its own "reality" or state of memory. 
-They do not need to agree on a single total modification order across all threads.
+For the program to end with `r1 == 1` and `r2 == 1`, D would have to occur before A, 
+and B would have to occur before C. We can observe a cycle in the graph; however, 
+these are only reads relations and *sequenced-before*. 
+While *sequenced-before* can be transformed into *happens-before*, the reads relations cannot and
+D occurring before A and B occurring before C does not violate these *happens-before* relationships.
 
 The answer is **YES**, the result `r1 == 1` and `r2 == 1` is allowed by the memory model. 
-From the perspective of individual variables, such as x, nothing prevents D from appearing before A 
-in the modification order of that variable. 
-However, each thread can observe the modifications in a different order. 
-Once again, there is no global consensus among threads on the modification order. 
+From the perspective of individual variables, such as x, 
+nothing prevents operation D from appearing before operation A in the modification order of that variable. 
+The only thing that prevents this is the *happens-before* relationship, which cannot be established with `memory_order::relaxed`
+(between thread).
+Therefore, each thread can observe the modifications in a different order. 
+Once again, there is no global consensus among threads on the modification order.
 Such consensus can be achieved with `memory_order::seq_cst`, but not with `memory_order::relaxed`.
 
 This type of issue is referred to as **out-of-thin-air** values because it appears as though the values come from nowhere. 
 The memory model permits this behavior. However, the C++ standard discourages such behavior in implementations:
-> This recommendation discourages producing r1 == r2 == 42, since the store of 42 to y is only possible if the store
+> This recommendation discourages producing r1 == r2 == 42, since the store of 1 to y is only possible if the store
 > to x stores 42, which circularly depends on the store to y storing 42. Note that without this restriction, such an
-> execution is possible.
+> execution is possible. (same example with different values in the standard)
 
 ```cpp
 // Thread 1:
@@ -373,7 +393,8 @@ Is it possible for the program to end with `r1 == 1` and `r2 == 1`? Let’s draw
 <img src="../images/blog_5.png" alt="Graph illustrating execution" style="width: 60%">
 
 In the graph, we can clearly see a cycle. 
-The difference is that the memory model forbids such cycles with *happens-before* relation. 
+The difference is that the memory model forbids such cycles with *happens-before* relation. This would
+also imply cycle in total order of the modification of the variable(coherence).
 Therefore, this execution cannot happen. The answer is **NO**.
 
 As you may have noticed, we haven't yet covered the `seq_cst` memory order. 
