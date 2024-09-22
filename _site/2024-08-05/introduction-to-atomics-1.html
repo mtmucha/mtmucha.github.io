@@ -247,7 +247,7 @@ avoiding the possibility of reading inconsistent or “gibberish” data.</li>
 
 <p>Relaxed atomics do not provide any synchronization guarantees between threads; 
 for that, we need to use stricter memory orders. 
-However, all the guarantees mentioned above, such as atomicity and coherence, 
+However, all the guarantees mentioned above, such as atomicity, 
 are also provided by the stricter memory orders.</p>
 
 <h2 id="acquire-and-release">Acquire and Release</h2>
@@ -416,7 +416,7 @@ for that the program ends with <code class="language-plaintext highlighter-rouge
 
 <p>Let’s model this scenario with a graph.</p>
 
-<p><img src="../images/blog_6.png" alt="My Image" style="width: 60%" /></p>
+<p><img src="../images/blog_6(1).png" alt="My Image" style="width: 60%" /></p>
 
 <p>Given that all operations use <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>, no <em>synchronizes-with</em> relation is formed, 
 meaning there is no <em>happens-before</em> relation between the threads.</p>
@@ -488,7 +488,7 @@ In the next part, we will explore this memory order in detail along with additio
 
     <!--<footer>
   <span>
-    &copy; <time datetime="2024-09-22 14:08:48 +0200">2024</time> Chester How. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+    &copy; <time datetime="2024-09-22 14:20:25 +0200">2024</time> Chester How. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
   </span>
 </footer>
 -->

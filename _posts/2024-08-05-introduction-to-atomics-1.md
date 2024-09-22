@@ -333,7 +333,7 @@ for that the program ends with `r1==1` and `r2==1` ?
 
 Let’s model this scenario with a graph.
 
-<img src="../images/blog_6.png" alt="My Image" style="width: 60%">
+<img src="../images/blog_6(1).png" alt="My Image" style="width: 60%">
 
 Given that all operations use `memory_order::relaxed`, no *synchronizes-with* relation is formed, 
 meaning there is no *happens-before* relation between the threads.

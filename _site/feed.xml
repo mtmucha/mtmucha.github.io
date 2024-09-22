@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2024-09-22T14:08:48+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Home</title><subtitle>Welcome to my blog! Here, I write articles about technical topics, currently focusing on C++ and concurrency. My aim is to share clear and practical explanations that I personally find helpful for understanding complex concepts.</subtitle><author><name>Chester How</name><email>chesterhow@gmail.com</email></author><entry><title type="html">Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)</title><link href="http://localhost:4000/2024-08-05/introduction-to-atomics-1" rel="alternate" type="text/html" title="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" /><published>2024-08-05T12:00:00+02:00</published><updated>2024-08-05T12:00:00+02:00</updated><id>http://localhost:4000/2024-08-05/introduction-to-atomics-1</id><content type="html" xml:base="http://localhost:4000/2024-08-05/introduction-to-atomics-1"><![CDATA[<p>Atomic variables and operations may seem straightforward at first glance. 
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.3.4">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2024-09-22T14:20:25+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Home</title><subtitle>Welcome to my blog! Here, I write articles about technical topics, currently focusing on C++ and concurrency. My aim is to share clear and practical explanations that I personally find helpful for understanding complex concepts.</subtitle><author><name>Chester How</name><email>chesterhow@gmail.com</email></author><entry><title type="html">Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)</title><link href="http://localhost:4000/2024-08-05/introduction-to-atomics-1" rel="alternate" type="text/html" title="Introduction to Atomics and the Memory Model in C++ and Rust (Part 1)" /><published>2024-08-05T12:00:00+02:00</published><updated>2024-08-05T12:00:00+02:00</updated><id>http://localhost:4000/2024-08-05/introduction-to-atomics-1</id><content type="html" xml:base="http://localhost:4000/2024-08-05/introduction-to-atomics-1"><![CDATA[<p>Atomic variables and operations may seem straightforward at first glance. 
 But did you know that you can specify a <code class="language-plaintext highlighter-rouge">memory_order</code> for individual atomic operations? Why is this useful? 
 By adjusting memory ordering, we can relax certain synchronization guarantees, which can lead to significant performance improvements. 
 There’s more to atomics than just ensuring “atomicity” in the sense of updates happening in a “single operation.”</p>
@@ -170,7 +170,7 @@ avoiding the possibility of reading inconsistent or “gibberish” data.</li>
 
 <p>Relaxed atomics do not provide any synchronization guarantees between threads; 
 for that, we need to use stricter memory orders. 
-However, all the guarantees mentioned above, such as atomicity and coherence, 
+However, all the guarantees mentioned above, such as atomicity, 
 are also provided by the stricter memory orders.</p>
 
 <h2 id="acquire-and-release">Acquire and Release</h2>
@@ -339,7 +339,7 @@ for that the program ends with <code class="language-plaintext highlighter-rouge
 
 <p>Let’s model this scenario with a graph.</p>
 
-<p><img src="../images/blog_6.png" alt="My Image" style="width: 60%" /></p>
+<p><img src="../images/blog_6(1).png" alt="My Image" style="width: 60%" /></p>
 
 <p>Given that all operations use <code class="language-plaintext highlighter-rouge">memory_order::relaxed</code>, no <em>synchronizes-with</em> relation is formed, 
 meaning there is no <em>happens-before</em> relation between the threads.</p>
