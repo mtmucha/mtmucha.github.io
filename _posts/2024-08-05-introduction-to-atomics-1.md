@@ -172,7 +172,7 @@ Atomics and relaxed memory order gives us 2 guarantees:
 
 Relaxed atomics do not provide any synchronization guarantees between threads; 
 for that, we need to use stricter memory orders. 
-However, all the guarantees mentioned above, such as atomicity and coherence, 
+However, all the guarantees mentioned above, such as atomicity, 
 are also provided by the stricter memory orders.
 
 ## Acquire and Release 
